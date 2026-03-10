@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Space Comet Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0d1117;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #gameContainer {
+            text-align: center;
+            position: relative;
+        }
+        #gameCanvas {
+            border: 3px solid #f78166;
+            box-shadow: 0 0 30px #f78166, inset 0 0 50px rgba(247, 129, 102, 0.1);
+            background: linear-gradient(to bottom, #0a0a1a 0%, #1a0a2e 100%);
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            color: #f78166;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #f78166;
+            pointer-events: none;
+        }
+        #controls {
+            color: #8b949e;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #f78166;
+            background: rgba(13, 17, 23, 0.95);
+            padding: 30px;
+            border: 2px solid #f78166;
+            border-radius: 10px;
+            box-shadow: 0 0 30px #f78166;
+        }
+        button {
+            background: #f78166;
+            color: #0d1117;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        button:hover {
+            background: #ff9478;
+            box-shadow: 0 0 15px #f78166;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <span>🏆 SCORE: <span id="score">0</span></span>
+            <span>❤️ LIVES: <span id="lives">3</span></span>
+            <span>🚀 WAVE: <span id="wave">1</span></span>
+        </div>
+        
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        
+        <div id="startScreen">
+            <h1>🚀 SPACE COMET SHOOTER</h1>
+            <p>Destrua os cometas antes que eles atinjam a Terra!</p>
+            <p>👆 Use ← → ou A D para mover</p>
+            <p>🔥 Pressione ESPAÇO para atirar</p>
+            <button onclick="startGame()">🎮 INICIAR JOGO</button>
+        </div>
+        
+        <div id="gameOverScreen" class="hidden">
+            <h1>💥 GAME OVER</h1>
+            <p>🏆 Score Final: <span id="finalScore">0</span></p>
+            <p>🌊 Waves Completadas: <span id="finalWave">0</span></p>
+            <button onclick="restartGame()">🔄 JOGAR NOVAMENTE</button>
+        </div>
+        
+        <div id="controls">🎮 ← → ou A D = Mover | ESPAÇO = Atirar</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameRunning = false;
+        let score = 0;
+        let lives = 3;
+        let wave = 1;
+        let animationId;
+        
+        // Spaceship
+        const spaceship = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            width: 30,
+            height: 30,
+            speed: 5,
+            color: '#48dbfb'
+        };
+        
+        // Bullets
+        let bullets = [];
+        
+        // Comets
+        let comets = [];
+        
+        // Stars background
+        let stars = [];
+        for (let i = 0; i < 50; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2,
+                speed: Math.random() * 0.5 + 0.1
+            });
+        }
+        
+        // Controls
+        let leftPressed = false;
+        let rightPressed = false;
+        let spacePressed = false;
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') leftPressed = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') rightPressed = true;
+            if (e.key === ' ' && gameRunning) shoot();
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') leftPressed = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') rightPressed = false;
+        });
+        
+        function shoot() {
+            bullets.push({
+                x: spaceship.x,
+                y: spaceship.y - 15,
+                width: 4,
+                height: 10,
+                speed: 7,
+                color: '#feca57'
+            });
+        }
+        
+        function createComet() {
+            const size = Math.random() * 20 + 15;
+            comets.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size,
+                width: size,
+                height: size,
+                speed: Math.random() * 2 + 1 + (wave * 0.3),
+                color: ['#ff6b6b', '#f78166', '#feca57', '#ff9ff3'][Math.floor(Math.random() * 4)],
+                rotation: 0,
+                rotationSpeed: Math.random() * 0.1 - 0.05
+            });
+        }
+        
+        function drawSpaceship() {
+            ctx.save();
+            ctx.translate(spaceship.x, spaceship.y);
+            
+            // Glow effect
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = spaceship.color;
+            
+            // Ship body
+            ctx.fillStyle = spaceship.color;
+            ctx.beginPath();
+            ctx.moveTo(0, -15);
+            ctx.lineTo(-10, 10);
+            ctx.lineTo(0, 5);
+            ctx.lineTo(10, 10);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine flame
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#f78166';
+            ctx.fillStyle = '#f78166';
+            ctx.beginPath();
+            ctx.moveTo(-5, 10);
+            ctx.lineTo(0, 20 + Math.random() * 10);
+            ctx.lineTo(5, 10);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        function drawBullet(bullet) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = bullet.color;
+            ctx.fillStyle = bullet.color;
+            ctx.fillRect(bullet.x - bullet.width/2, bullet.y, bullet.width, bullet.height);
+            ctx.shadowBlur = 0;
+        }
+        
+        function drawComet(comet) {
+            ctx.save();
+            ctx.translate(comet.x + comet.width/2, comet.y + comet.height/2);
+            ctx.rotate(comet.rotation);
+            
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = comet.color;
+            ctx.fillStyle = comet.color;
+            
+            // Draw comet shape (spiky circle)
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const radius = i % 2 === 0 ? comet.width/2 : comet.width/3;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            
+            // Tail
+            ctx.fillStyle = `rgba(255, 255, 255, 0.3)`;
+            ctx.beginPath();
+            ctx.moveTo(-comet.width/4, -comet.height/2);
+            ctx.lineTo(0, -comet.height * 1.5);
+            ctx.lineTo(comet.width/4, -comet.height/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        function drawStars() {
+            ctx.fillStyle = 'white';
+            stars.forEach(star => {
+                ctx.globalAlpha = Math.random() * 0.5 + 0.5;
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+            });
+            ctx.globalAlpha = 1;
+        }
+        
+        function update() {
+            if (!gameRunning) return;
+            
+            // Move spaceship
+            if (leftPressed && spaceship.x > 20) spaceship.x -= spaceship.speed;
+            if (rightPressed && spaceship.x < canvas.width - 20) spaceship.x += spaceship.speed;
+            
+            // Update bullets
+            bullets = bullets.filter(bullet => {
+                bullet.y -= bullet.speed;
+                return bullet.y > 0;
+            });
+            
+            // Spawn comets
+            if (Math.random() < 0.02 + (wave * 0.005)) {
+                createComet();
+            }
+            
+            // Update comets
+            comets.forEach(comet => {
+                comet.y += comet.speed;
+                comet.rotation += comet.rotationSpeed;
+            });
+            
+            // Remove off-screen comets
+            comets = comets.filter(comet => {
+                if (comet.y > canvas.height) {
+                    lives--;
+                    updateUI();
+                    if (lives <= 0) gameOver();
+                    return false;
+                }
+                return true;
+            });
+            
+            // Collision detection
+            bullets.forEach((bullet, bulletIndex) => {
+                comets.forEach((comet, cometIndex) => {
+                    if (bullet.x > comet.x && 
+                        bullet.x < comet.x + comet.width &&
+                        bullet.y > comet.y && 
+                        bullet.y < comet.y + comet.height) {
+                        
+                        // Remove bullet and comet
+                        bullets.splice(bulletIndex, 1);
+                        comets.splice(cometIndex, 1);
+                        
+                        // Add score
+                        score += 100;
+                        updateUI();
+                        
+                        // Wave progression
+                        if (score > wave * 1000) {
+                            wave++;
+                            updateUI();
+                        }
+                    }
+                });
+            });
+            
+            // Update stars
+            stars.forEach(star => {
+                star.y += star.speed;
+                if (star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+            });
+        }
+        
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw stars
+            drawStars();
+            
+            if (gameRunning) {
+                // Draw game objects
+                bullets.forEach(drawBullet);
+                comets.forEach(drawComet);
+                drawSpaceship();
+            }
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('lives').textContent = lives;
+            document.getElementById('wave').textContent = wave;
+        }
+        
+        function startGame() {
+            document.getElementById('startScreen').classList.add('hidden');
+            gameRunning = true;
+            score = 0;
+            lives = 3;
+            wave = 1;
+            bullets = [];
+            comets = [];
+            updateUI();
+            gameLoop();
+        }
+        
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationId);
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalWave').textContent = wave;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+        
+        function restartGame() {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            startGame();
+        }
+        
+        // Start drawing stars immediately
+        draw();
+    </script>
+</body>
+</html>
